@@ -1,76 +1,33 @@
-# Rescue-Route
-Rescue Route is a smart disaster management platform offering real-time risk alerts, safe evacuation routes, 3D maps, and emergency rescue coordination.
-Rescue Route — Bengaluru
-Safer Routes. Faster Rescue.
-Simulation / Demonstration — Not live emergency guidance.
-Run and deploy
-React 19 / TanStack Start, with backend server functions on the existing Higgsfield Cloudflare Worker. From app/: `bun install`, `bun run dev`, `bun run typecheck`, `bun run build`. These are owner setup instructions; no dependencies were installed during this edit. Deploy the complete repository using Higgsfield. The existing Vite configuration produces a Worker and is not directly Vercel-compatible; a Vercel runtime adapter is required for a separate Vercel deployment. No map API key is needed. Street tiles use OpenStreetMap; optional satellite imagery uses Esri World Imagery. Observe the providers' attribution and usage terms; production/high-volume usage requires an appropriate tile service.
-Included
-Bengaluru origin search, manual coordinates, browser location tracking with permission.
-Real street-following OSM/OSRM driving and walking geometry in a bundled network (see src/data/network.json for retrieval time).
-Backend Dijkstra search with cumulative simulated flood exposure ranked first, time second, distance third. Each segment is geometrically tested against flood circles, including segments crossing a circle with endpoints outside it. Named road closures exclude all matching segments.
-Six fictional demonstration centres, capacities, availability, food/water, medical and accessibility filters.
-Walking, simulated BMTC bus, walking + bus transfers at demo pickup nodes; operative demonstration vehicle and ambulance modes. This is not authentication or dispatch.
-Fail-closed unavailable metro and boat options. Reference metro pins do not assert operational service or access. No metro rail graph, station-access verification, boat navigation chart or authorised dispatch backend is connected.
-Alternative suitable-centre routes, street-name directions, scenario updates, route export, reroute history, map layer controls and reduced motion.
-Data and limitations
-The bundled graph is the union of selected OSRM walking and driving routes and alternatives between 12 Bengaluru areas, not a complete Bengaluru road extract. It respects directions in the retrieved driving paths and allows walking in both directions on the retrieved walking paths. It cannot find every real-world alternative. Unknown or out-of-coverage routes return unavailable. Route origin and destination snap to mapped network nodes within 250 m; access gaps are explicitly disclosed and not drawn as verified directions. Any detected simulated hazard on the access gap blocks the route. These access paths are still unsurveyed.
-Flood/rainfall, closures, centre locations/availability, accessibility and BMTC service are simulated. No current road, transit, weather or emergency authority feeds are connected. Accessibility is a demonstration assumption (dry non-step named segments); not a wheelchair survey. Walking at depth >=10 cm and vehicles at >=20 cm are excluded as demo rules, never real safety thresholds. Unknown depth outside the simulated polygons is modelled as zero for demonstration only.
-BMTC services are fictional corridor services over actual driving geometry, with 8-minute boarding and 2-minute alighting assumptions, operating only at demo pickup nodes. No real route numbers or timetables are claimed. Bus-only starts at a road-network node and does not model access walking. Use mixed mode for transfers where covered. All rescue-only modes are simulation controls; no real operative access is granted.
-The map retains the existing custom Web Mercator tile renderer. Leaflet/MapLibre is not integrated because this hosted editing environment prohibited dependency additions. Pan, zoom, fit, layers, satellite toggle, marker cards and route paths are functional. Metro/hospital pins are approximate reference locations and their accessibility/capacity are unverified. Source map roads are OpenStreetMap community data, not independently surveyed.
-Source data / licensing
-© OpenStreetMap contributors, ODbL: https://www.openstreetmap.org/copyright
-Routing data providers: https://router.project-osrm.org and https://routing.openstreetmap.de/routed-foot/
-Satellite tiles: Esri World Imagery (provider attribution is displayed).
-`python3 scripts/fetch-network.py` fetches a fresh limited corridor dataset, then `python3 scripts/compile-network.py` compiles the graph. Public services are for demonstration use and may be unavailable. The bundled graph works without them at runtime; map imagery still requires internet.
-Validation
-`node --experimental-strip-types tests/rescue-routing.test.mjs` (Node 22+) checks actual geometry, closures, capacity, operative restrictions, transit unavailable states, coverage, risk ordering, accessibility and scenario combinations. Platform deployment runs TypeScript and Vite build. Local Bun/TypeScript were unavailable in this sandbox.
-Structure
-src/routes/index.tsx: interactive dashboard
-src/RescueMap.tsx: map renderer
-src/rescue.css: responsive styling
-src/lib/rescue-engine.ts: routing and simulation
-src/lib/rescue.functions.ts: validated server entry point
-src/data/network.json: bundled road/walking graph
-scripts/: reproducible data processing
-Destination and map update
-All 12 named neighbourhoods are now available as destinations, alongside rescue centres. Search or select a destination, type/select a start and press Find Safer Route. The main action applies a named origin before calculating; unknown addresses require selection of a search result. Area destinations have no shelter or medical availability guarantee.
-The map automatically fits each current route, shows a B destination marker and a distance/time card. Same-point trips retain an endpoint and display an arrival explanation. Blocked routes show their reason on the map. Mobile places the planner before the map.
-Regression checks now cover all 12 destinations, matching endpoints, same-point arrival, hazard refusal and area/facility distinctions. Local Bun/TypeScript and browser app runtime dependencies are unavailable; platform compilation is the build check, and no visual browser check is claimed.
-Expanded coverage and blocked previews
-When bundled geometry cannot connect a start, the backend requests foot or driving road routes from the existing OSM/OSRM providers, merges returned street segments into a per-request graph and reruns the same flood, closure and mode checks. Coordinates can be sent to these providers; the location-permission explanation discloses this. There is no persistent location cache. Public service availability is not guaranteed. On-demand region: longitude 76.9–78.1, latitude 12.4–13.7. Access gaps must remain within 250 m; points are never silently moved to another area.
-Unavailable/unsupported locations receive retry and explicit area selection controls. No synthetic straight line is substituted. Closures use road names so provider-specific numeric indices cannot silently change the closure.
-Flood-blocked trips can show a separate grey dashed reference path with impassable flooded segments highlighted red. It has no travel directions, export or navigation. The actual permitted route remains null. Clear simulated floods resets scenario to watch, extra flood depth and tick to zero, pauses auto-updates, and retains start, destination and road closures. This is a comparison, not a claim about real flood safety.
-Tests: `node --experimental-strip-types tests/route-recovery.test.mjs`. Optional real service test: `RUN_LIVE_ROUTING=1 node --experimental-strip-types tests/route-recovery.test.mjs`.
-Explicit starting-point selection
-The page starts with no origin selected and makes no route request until the user selects an area/address, drops a pin, enters coordinates or grants location permission. Typing invalidates old routes and pending address/location results. Exact named-area input and the visible area buttons immediately apply coordinates. Unknown text requires an explicit address-result selection and never falls back to Bellandur. The selected A marker displays its label and the planner shows its coordinates. Reset clears the origin.
-Regression: `node --experimental-strip-types tests/origin-selection.test.mjs` verifies empty/unknown input, aliases and distinct routes from four selected starting points.
-Device location and map visibility update
-Device location uses fresh high-accuracy coordinates first, then retries with standard accuracy after a timeout or unavailable fix. Permission denial is reported separately and never silently replaced by a preset area. Errors distinguish permission, device availability, timeout, unsupported browser and insecure context. Requests are cancellable; late callbacks cannot overwrite a newly selected start. Exact returned coordinates and accuracy are shown, with an approximate-position explanation above 300 m. Embedded views offer a direct-site link where the parent frame may restrict geolocation.
-The map now shows simulated risk areas before an origin is chosen. Thick blue routes have a white halo and direction chevrons; high-contrast flood fills have clear borders, depth badges and hatching. Clickable zone cards zoom to each area. Added route focus, high contrast, route fitting, device location and guided pin placement controls. Blocked previews remain grey/red and cannot be used for navigation.
-Validation: `node --experimental-strip-types tests/device-location.test.mjs` passed for exact coordinates, permission denial, timeout fallback, approximate fixes, unavailable location, insecure contexts, cancellation and invalid fixes. A local Chromium harness passed with granted, simulated coordinates; this does not verify physical-device GPS or the complete deployed page. Origin-selection, route-recovery and routing regression suites also passed. Hosted deployment supplies the TypeScript/Vite compilation gate.
-Road colours and provider identification fix
-The latest map replaces the single blue journey line with street-following green, yellow and red sections. Green means zero flood depth in the simulation, yellow is nonzero depth below the selected transport model threshold, and red means excluded depth or a selected road closure. Green never asserts real-world safety. The calculation splits road geometry at model-zone boundaries, retains the real street path and applies walking, vehicle and step-free restrictions. Nearby mapped corridors and roads around modelled hazard areas are coloured; uncoloured roads remain unassessed. A thick white border and arrows identify the selected journey. Flood-area outlines are optional and off by default. Blocked previews retain their dashed boundary and disabled directions/navigation.
-The supplied screenshot showed successful device geolocation followed by an upstream road-service failure. Reproduction found the public service returns HTTP 403 when a request has no User-Agent; the identified application request succeeded. Server lookups now include the application name and public site URL, retain the correct Referer, stagger request starts per Worker instance, retry transient failures once, and report explicit HTTP errors. HTTP 403/429 are not automatically retried. No attempt is made to substitute driving geometry for walking or to move the selected start. Public routing services still have no availability guarantee.
-Validation: the exact screenshot location was tested transiently against the real foot-routing service for automatic-centre and Majestic destinations; both returned 357-point, 8.48 km road routes with a 54 m access gap. The user's coordinates were not added to source or test fixtures. New road-risk tests cover continuous colour transitions, mode thresholds, closures and blocked previews. Existing route, origin and location suites passed. Provider fixtures verify identifying headers, transient recovery and rate-limit handling. The hosted build validates TypeScript; no full deployed browser test is claimed.
-Mixed risk distribution and appearance controls
-Wet presets now contain high-risk pockets and caution approaches at the same time, distributed over mapped roads in northeast, northwest, southeast and southwest Bengaluru. These are fixed demonstration patches, not real incident reports. Existing area hazards remain; red cores and yellow approaches use the same zone geometry for road colouring and route exclusion. High-risk cores are anchored to actual bundled walking-road coordinates. Clear simulated floods still removes every patch. Road-risk regression verifies both red/yellow coexistence and spread across four directions in Heavy and Extreme presets. The earlier current-location route also passed with the new patches.
-A Light / Dark control in the header changes the complete dashboard, form controls, cards, dialogs and map appearance. Street tiles are filtered separately from risk overlays; red/yellow/green retain their meaning. Satellite tiles are dimmed in dark mode. The choice is stored only as a browser appearance preference; initial choice follows the system when no preference exists. All browser preference access occurs after mount or in click handlers for SSR compatibility. No account or location data is stored by the theme control.
-Personal car and two-wheeler transport
-Own car and two-wheeler are public options in the transport selector and quick-choice cards. They do not require operative demonstration mode. Both route only over directed driving edges and use the existing driving provider when additional geometry is needed; a two-wheeler never inherits walking shortcuts. The available provider is a car-road profile, so motorcycle-specific legal restrictions are unverified and disclosed. Rescue vehicle and ambulance restrictions remain separate.
-Travel durations use model speeds of 20 km/h for a personal car and 25 km/h for a two-wheeler, consistently for route ranking, leg times, the summary and map card. These are demonstration estimates, not live traffic predictions, and exclude parking, access gaps and unmodelled stops. Two-wheeler routes exclude simulated depths >=10 cm; cars exclude >=20 cm under the existing vehicle model. These are demo thresholds, never safe-water-depth guidance. The same threshold is applied to road sections, origin/destination access gaps and blocked-preview colours.
-Destination snapping now checks incoming directed road connections, allowing a valid arrival at a one-way road endpoint. Starting-point snapping continues to require outgoing mode-compatible roads. Tests cover public-mode availability, directed driving-only geometry, exact duration arithmetic, closures, mode-specific flood exclusions, preview colouring and driving-provider contracts. All route, road-risk, origin and recovery regression suites passed. Hosted compilation validates the UI; no deployed browser visual verification is claimed.
-Visual design update
-The command-center theme is isolated in `src/command-center.css`, imported after the existing stylesheet. It preserves all routing, provider, search, geolocation, navigation and control handlers. Dark is the initial appearance; a saved Light/Dark choice still takes precedence. The new status banner counts the existing main simulated hazard areas, excluding nested caution/core geometry. Risk card depth bars use a 60 cm visual scale capped at 100%. Selected permitted routes are cyan with dark outlines; surrounding roads and blocked previews retain their risk colours. Risk colours are otherwise reserved for risk information and the demo disclaimer.
-Controls/handler preservation was checked against the pre-redesign source (87 handlers unchanged). A temporary browser fixture using the real styles passed desktop/mobile palette, primary/secondary button styling, route contrast, sticky status sizing, proportional bars, light theme and reduced-motion checks. This does not claim full deployed-browser or real-device GPS testing.
-Combined planner and Simulation
-The top workspace switch opens either Bengaluru Route Planner or Simulation. Both remain mounted after first use, retaining their in-session inputs, route and simulation progress. The simulation is lazy-loaded from `public/simulation/`; its fictional Rivergate data is kept separate from the Bengaluru map.
-The uploaded package supplied a prebuilt app, not editable TypeScript source. Its city model, flood calculations, routing and controls remain in the supplied JavaScript bundle. The integration changes only presentation and branding: visible names, accessible labels, logo, the light palette, software-renderer labels and WebGL background/fog. No dependency or lockfile changes were needed.
-`src/FloodExperiences.tsx` shares the main theme choice with the simulation through a same-origin message restricted to the parent window. The frame reads the parent's current theme before rendering, then updates appearance without reload. `public/simulation/appearance.js` receives validated light/dark changes; `appearance.css` adapts the supplied dark stylesheet for light mode. Both canvas and WebGL rendering paths follow the selected theme. The top Light/Dark buttons work from either workspace and use the existing saved preference.
-The offline cache is scoped to `/simulation/`; its appearance assets are precached. The Bengaluru planner's geolocation, search, routing and transport code are unchanged. Dispatch and broadcasts remain local simulated records, not real messages.
-Verification: an isolated browser integration using the actual runtime, switch markup and styles passed initial light mode, live light/dark synchronization, absence of old visible/accessibility branding, stable route/session state after theme changes, switching workspaces, 390px mobile controls, and theme switching during a running demo. The WebGL path was checked using a software graphics driver; native hardware performance is not claimed. Both renderer paths were visually reviewed, with no browser exceptions or failed asset responses. These local checks do not claim deployed full-app browser verification; hosted compilation is the React integration gate.
-Simulation preview loading repair
-The hosted static HTML response carries a platform frame-ancestors allowlist that omits some preview origins. Nested frames check every ancestor, so a valid same-origin simulation URL can still be rejected inside an external preview. HTTP inspection confirmed the document and its runtime assets exist and return 200; the index path redirects to /simulation/.
-The workspace now uses a bundled, trusted srcDoc document with an explicit /simulation/ base, avoiding the additional hosted HTML navigation. Modules, CSS, fonts and images still load from the same site. The app's security headers are unchanged. The appearance bridge derives its trusted origin from document.baseURI because srcDoc has an about: URL. Only messages from the immediate parent and the matching origin are accepted.
-A mounted-app handshake replaces iframe.onload as the success signal. Required asset errors and a 30-second timeout show a Retry simulation control. Switching themes or workspaces keeps the same loaded instance; retry explicitly remounts only the simulation. The standalone /simulation/ document remains available.
-Validation: a browser fixture replaying the observed production CSP reproduced the original blocked frame in a cross-origin preview. The revised trusted document loaded the actual simulation with no failed asset responses or uncaught browser exceptions. Light/dark synchronization, workspace state retention, running/resetting the demo, mobile controls and required-module failure/retry passed. These are local integration tests with the real static simulation, not a full deployed-app browser test. A repeat with software WebGL exceeded the sandbox time limit, so that repeat is not claimed as passed. Local TypeScript dependencies remain unavailable; platform compilation is the integration build gate.
+# Vendored Higgsfield packages
+
+This directory contains local workspace snapshots synced from the fnf-web
+repository. Do not manually edit their source in generated apps unless the task
+explicitly asks to patch a package snapshot.
+
+- `@higgsfield/fnf` — SDK core: jobs, media, profile, observability, adapters.
+- `@higgsfield/fnf-react` — React provider, TanStack Query options, cache door,
+  controllers.
+- `@higgsfield/quanta` — Higgsfield design tokens, CSS entries, and React
+  components.
+
+To refresh managed snapshots from a local checkout:
+
+```bash
+HIGGSFIELD_REPO=/Users/dastantynyshtyk/Documents/fnf-web \
+FNF_REF=HEAD \
+QUANTA_REF=HEAD \
+bun run sync:packages
+```
+
+The sync writes `packages/.snapshot.json` with source commits, bundle artifact
+name/SHA256, actor, sync mode, and timestamp. After syncing, run `bun install`
+at the app root so workspace links and `bun.lock` match the new snapshots.
+
+Before using or editing a vendored package, read its guide:
+
+- `packages/fnf/ai/AGENTS.md`
+- `packages/fnf-react/ai/AGENTS.md`
+- `packages/quanta/ai/AGENTS.md`
+
+Template-owned infrastructure lives under `app/src/module/**`. The
+Supercomputer Design mode child bridge is `app/src/module/design-inspector`.

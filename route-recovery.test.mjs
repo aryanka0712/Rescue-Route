@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {simulate} from '../src/lib/rescue-engine.ts';
+import {expandedSituation,mergeCorridors} from '../src/lib/expanded-routing.server.ts';
+const g=JSON.parse(fs.readFileSync(new URL('../src/data/network.json',import.meta.url)));
+const base={origin:'hebbal',custom:null,scenario:'extreme',tick:2,closed:[],wheelchair:false,medical:false,people:4,destination:'area:majestic',mode:'walk',operative:false,busDisrupted:false,metroDisrupted:false,flood:0};
+const noFetch=()=>{throw Error('Unexpected network request')};
+const flooded=await expandedSituation(base,g,noFetch);
+assert.equal(flooded.zones.find(z=>z.id==='hebbal').depth,21);
+assert.equal(flooded.route,null);assert.equal(flooded.routes.length,0);
+assert(flooded.blockedPreview.geometry.length>2);assert(flooded.blockedPreview.blockedSegments.length>0);
+assert(!('legs' in flooded.blockedPreview),'blocked preview contains no navigable directions');
+const clear=await expandedSituation({...base,scenario:'watch',tick:0,flood:0},g,noFetch);
+assert(clear.route);assert.equal(clear.blockedPreview,null);assert.deepEqual(clear.origin,flooded.origin);assert.equal(clear.route.shelter.id,base.destination);
+const start=[77.556,12.934];
+assert.equal(simulate({...base,custom:start,scenario:'watch',tick:0},g).issue,'coverage');
+const tiny={nodes:[[77.50,12.90],[77.5707,12.9774]],edges:[[0,1,0,10000,1,0],[1,0,0,10000,1,0]],names:['Fixture existing road'],source:'TEST ONLY',retrieved:'2026-10-22'};
+// Synthetic provider fixture tests contracts only, never used in the website.
+const step={name:'Fixture connector',geometry:{coordinates:[start,[77.560,12.950],[77.5707,12.9774]]}};
+let calls=0;
+const provider=async(url,options)=>{calls++;assert(options.headers['User-Agent'].startsWith('RescueRouteBengaluru/'));assert.equal(options.headers.Referer,'https://rescue-route-bengaluru.higgsfield.app/');assert(String(url).startsWith('https://routing.openstreetmap.de/routed-foot/'));assert(String(url).includes('radiuses=250;250'));return new Response(JSON.stringify({code:'Ok',waypoints:[{distance:0},{distance:0}],routes:[{legs:[{steps:[step]}]}]}))};
+const custom={...base,custom:start,scenario:'watch',tick:0};
+const connected=await expandedSituation(custom,tiny,provider);
+assert.equal(calls,1);assert(connected.route);assert.equal(connected.lookup.state,'expanded');assert.deepEqual(connected.origin,start);assert(connected.route.geometry.length>=3);assert.equal(tiny.nodes.length,2,'base graph is not mutated');
+const closed=await expandedSituation({...custom,closedNames:['Fixture connector']},tiny,provider);assert.equal(closed.route,null,'external road closure retained');
+const offline=await expandedSituation(custom,tiny,async()=>{throw new Error('Provider unavailable')});assert.equal(offline.route,null);assert.equal(offline.lookup.state,'unavailable');assert.deepEqual(offline.origin,start);assert.equal(offline.blockedPreview,null);
+const outside=await expandedSituation({...custom,custom:[72.87,19.07]},tiny,noFetch);assert.equal(outside.lookup.state,'outside');assert.equal(outside.route,null);
+const invalid=mergeCorridors(tiny,[{walking:true,steps:[{geometry:{coordinates:[[NaN,0],[77,13]]}}]}]);assert.equal(invalid.edges.length,tiny.edges.length);
+const car=mergeCorridors(tiny,[{walking:false,steps:[step]}]);const added=car.edges.slice(tiny.edges.length);assert(added.every(e=>e[4]===0&&e[5]===1),'driving routes never become walking routes');assert.equal(added.length,2,'driving directions are not reversed');
+let attempts=0;
+const recovered=await expandedSituation(custom,tiny,async(url,options)=>{attempts++;if(attempts===1)return new Response('Temporary outage',{status:503});return provider(url,options)});
+assert(recovered.route);assert.equal(attempts,2,'transient HTTP error receives one bounded retry');
+attempts=0;
+const busy=await expandedSituation(custom,tiny,async()=>{attempts++;return new Response('Rate limited',{status:429})});
+assert.equal(attempts,1,'rate limits are not automatically retried');assert.equal(busy.route,null);assert.match(busy.reason,/429/);
+attempts=0;
+const forbidden=await expandedSituation(custom,tiny,async()=>{attempts++;return new Response('Forbidden',{status:403})});
+assert.equal(attempts,1);assert.match(forbidden.reason,/403/);assert.equal(forbidden.route,null);
+console.log('PASS: identified provider requests, transient retry and explicit rate-limit/HTTP error handling.');
+console.log('PASS: screenshot Hebbal 21cm, blocked-only geometry, clear-flood comparison, extended coverage, stable closures, provider failure, bounds, invalid geometry and mode separation.');
+if(process.env.RUN_LIVE_ROUTING==='1'){
+ const live=await expandedSituation(custom,g);assert(live.route,live.reason);assert.equal(live.lookup.state,'expanded');assert(live.route.geometry.length>10);assert(live.route.snapMeters<=250);assert.deepEqual(live.origin,start);
+ console.log(JSON.stringify({live:'PASS',km:live.route.km,points:live.route.geometry.length,snapMeters:live.route.snapMeters,destination:live.route.shelter.name}));
+}

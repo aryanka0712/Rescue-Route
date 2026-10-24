@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {locateDevice,positionToFix} from '../src/lib/device-location.ts';
+const point={coords:{longitude:77.556,latitude:12.934,accuracy:25},timestamp:1234};
+const good=await locateDevice({secure:true,api:{getCurrentPosition(ok){ok(point)}}});
+assert.deepEqual(good.point,[77.556,12.934]);assert.equal(good.accuracy,25);assert.equal(good.approximate,false);
+let calls=0;
+await assert.rejects(locateDevice({secure:true,api:{getCurrentPosition(ok,fail){calls++;fail({code:1})}}}),e=>e.code==='denied');assert.equal(calls,1,'denied permission is not retried');
+const options=[];
+const fallback=await locateDevice({secure:true,api:{getCurrentPosition(ok,fail,opt){options.push(opt);if(options.length===1)fail({code:3});else ok({...point,coords:{...point.coords,accuracy:750}})}}});
+assert.equal(options[0].enableHighAccuracy,true);assert.equal(options[1].enableHighAccuracy,false);assert.equal(fallback.approximate,true);assert.equal(options[1].maximumAge,0);
+await assert.rejects(locateDevice({secure:true,api:{getCurrentPosition(ok,fail){fail({code:2})}}}),e=>e.code==='unavailable');
+await assert.rejects(locateDevice({secure:false,api:{getCurrentPosition(){throw Error('must not run')}}}),e=>e.code==='insecure');
+const abort=new AbortController();let late;
+const pending=locateDevice({secure:true,signal:abort.signal,api:{getCurrentPosition(ok){late=ok}}});abort.abort();await assert.rejects(pending,e=>e.code==='cancelled');late(point);
+assert.throws(()=>positionToFix({...point,coords:{...point.coords,longitude:NaN}}));
+console.log('PASS: exact device coordinates, denied permission, timeout fallback, coarse accuracy, unavailable service, insecure context, cancellation and invalid fixes.');
